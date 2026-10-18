@@ -1,37 +1,62 @@
 # hwpass
 
-紙に手書きする・口頭で伝える・リモコンで打つ、でも写し間違えないパスワードを出す CLI。
+手入力が必要になっても打ちやすいパスワードを出す CLI。半分ジョーク、でも実用。
+
+同じ文字の連続 (ラン) を並べ、記号は 1 個だけ。強度は **このアルゴリズムを知っている攻撃者** 基準の bit 数で正直に出す。
 
 ```console
 $ hwpass
-7KQM-2HXD-9RTF-4WBN
-80 bits
+ppppLLLLeeeemmmm222@2
+  pppp LLLL eeee mmmm 222@2
+  21 chars, known 34.8 bits, naive 137.6 bits
 
-$ hwpass normalize "7kqm 2hxd 9rtf 4wbn"
-7KQM-2HXD-9RTF-4WBN
+$ hwpass -r 13
+ccccggggEEEE6666jjjj2222YYYY6666ddddVVVVZZZZ4444LL@LL
+  cccc gggg EEEE 6666 jjjj 2222 YYYY 6666 dddd VVVV ZZZZ 4444 LL@LL
+  53 chars, known 83.3 bits, naive 347.4 bits
 ```
+
+stdout はパスワードだけ。ランの区切り表示と強度は stderr なので `hwpass | pbcopy` でもパスワードだけ渡る。
 
 ## 規則
 
 | 項目 | 内容 |
 | --- | --- |
-| 文字 | Crockford Base32 の 32 文字 `0-9 A-Z` から `I L O U` を除く |
-| 大文字小文字 | 区別しない (出力は大文字) |
-| 区切り | 4 文字ごとに `-` |
-| 強度 | 1 文字 5 bit。既定 16 文字 = 80 bit |
-| 乱数 | `crypto/rand` |
-| `normalize` | 小文字・空白を許し、`O` → `0`、`I` `L` → `1` に読み替えて正規化 |
+| ラン | 同じ文字を `-b` 文字 (既定 4) 続ける。隣のランとは必ず違う文字 |
+| 文字種 | 小文字・大文字・数字・記号を全部使う |
+| 紛らわしい文字 | `0 O o 1 l I` を使わない |
+| 記号 | `! @ . - $ ?` から 1 個、ランダムな位置に。多くのサイトで通る記号だけにして再設定を避ける |
+| 乱数 | `crypto/rand`。条件を満たさない候補は捨てて引き直すので偏らない |
+
+## 強度
+
+| 表示 | 意味 |
+| --- | --- |
+| `known` | hwpass とそのオプションを知る攻撃者に対する推測空間。**こちらが本当の強度** |
+| `naive` | 同じ長さの印字可能 ASCII 全部を総当たりする攻撃者。参考値 |
+
+長さは強度にならない。効くのは **ランの数**。
+
+| オプション | 長さ | known |
+| --- | --- | --- |
+| 既定 (`-r 5`) | 21 | 約 35 bit: ログイン回数制限のあるオンライン専用 |
+| `-r 13` | 53 | 約 83 bit: 記号混じりランダム 12 文字 (79 bit) 相当 |
+| `-v -r 12` | 約 31 | 約 100 bit: ランの長さもランダム。ただし数える必要がある |
 
 ## 使い方
 
 ```
-hwpass [-g groups] [-s size] [-n count] [-q]
-hwpass normalize [-s size] <text>...
-hwpass version
+hwpass [-r runs] [-b len] [-v] [-s symbols] [-c count] [-q]
 ```
 
-- `-g` グループ数 (既定 4)、`-s` 1 グループの文字数 (既定 4)、`-n` 生成数、`-q` 強度表示を消す
-- 強度は stderr に出るので `hwpass | pbcopy` でもパスワードだけ渡る
+| フラグ | 既定 | 内容 |
+| --- | --- | --- |
+| `-r` | 5 | ランの数 |
+| `-b` | 4 | 1 ランの文字数 (`-v` なら最大値) |
+| `-v` | off | ランの長さを 1〜`-b` でランダムにする。強いが数える手間が出る |
+| `-s` | `!@.-$?` | 記号の候補。`""` で記号なし |
+| `-c` | 1 | 生成数 |
+| `-q` | off | パスワードだけ出す |
 
 ## インストール
 
@@ -39,8 +64,4 @@ hwpass version
 go install github.com/elzup/hwpass@latest
 ```
 
-またはリリースページからバイナリを取得 (`v*` タグで GitHub Actions がビルド)。
-
-## 制約
-
-「記号必須」「大文字小文字の混在必須」のサイトには、そのままでは通らない。
+または `v*` タグで GitHub Actions がビルドするリリースのバイナリ。

@@ -1,5 +1,5 @@
-// hwpass generates passwords that survive being handwritten, read aloud, or
-// typed on a TV remote: no ambiguous characters, no case, grouped by 4.
+// hwpass generates passwords that are easy to type by hand: runs of one
+// repeated character, every character class, and a single common symbol.
 package main
 
 import (
@@ -7,15 +7,23 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
 )
 
 var version = "dev"
 
-const usage = `usage:
-  hwpass [-g groups] [-s size] [-n count] [-q]   generate passwords
-  hwpass normalize [-s size] <text>...            fix a hand-copied password
-  hwpass version
+const usage = `usage: hwpass [flags]
+
+  -r runs     number of runs (default 5)
+  -b len      characters per run (default 4)
+  -v          vary run length randomly in 1..len (stronger, but you count)
+  -s symbols  candidates for the single symbol (default "!@.-$?", "" for none)
+  -c count    number of passwords (default 1)
+  -q          print only the password
+  -version    print version
+
+stderr shows the runs separated by spaces and the strength in bits:
+  known  attacker knows hwpass and its flags (the honest number)
+  naive  attacker brute-forces all printable ASCII of the same length
 `
 
 func main() {
@@ -23,60 +31,37 @@ func main() {
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
-	if len(args) > 0 {
-		switch args[0] {
-		case "normalize":
-			return runNormalize(args[1:], stdout, stderr)
-		case "version":
-			fmt.Fprintln(stdout, version)
-			return 0
-		}
-	}
-	return runGenerate(args, stdout, stderr)
-}
-
-func runGenerate(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("hwpass", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.Usage = func() { fmt.Fprint(stderr, usage) }
-	groups := fs.Int("g", 4, "number of groups")
-	size := fs.Int("s", 4, "characters per group")
-	count := fs.Int("n", 1, "number of passwords")
-	quiet := fs.Bool("q", false, "do not print entropy to stderr")
+	o := Options{}
+	fs.IntVar(&o.Runs, "r", 5, "")
+	fs.IntVar(&o.RunLen, "b", 4, "")
+	fs.BoolVar(&o.Vary, "v", false, "")
+	fs.StringVar(&o.Symbols, "s", DefaultSymbols, "")
+	count := fs.Int("c", 1, "")
+	quiet := fs.Bool("q", false, "")
+	showVersion := fs.Bool("version", false, "")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
+	if *showVersion {
+		fmt.Fprintln(stdout, version)
+		return 0
+	}
 	for i := 0; i < *count; i++ {
-		pw, err := Generate(*groups, *size)
+		res, err := Generate(o)
 		if err != nil {
 			fmt.Fprintln(stderr, "hwpass:", err)
 			return 1
 		}
-		fmt.Fprintln(stdout, pw)
+		fmt.Fprintln(stdout, res.Password)
+		if *quiet {
+			continue
+		}
+		s := Estimate(o, len(res.Password))
+		fmt.Fprintf(stderr, "  %s\n  %d chars, known %.1f bits, naive %.1f bits\n",
+			res.View, len(res.Password), s.Known, s.Naive)
 	}
-	if !*quiet {
-		fmt.Fprintf(stderr, "%d bits\n", *groups**size*BitsPerChar)
-	}
-	return 0
-}
-
-func runNormalize(args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("normalize", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	fs.Usage = func() { fmt.Fprint(stderr, usage) }
-	size := fs.Int("s", 4, "characters per group")
-	if err := fs.Parse(args); err != nil {
-		return 2
-	}
-	if fs.NArg() == 0 {
-		fs.Usage()
-		return 2
-	}
-	out, err := Normalize(strings.Join(fs.Args(), " "), *size)
-	if err != nil {
-		fmt.Fprintln(stderr, "hwpass:", err)
-		return 1
-	}
-	fmt.Fprintln(stdout, out)
 	return 0
 }

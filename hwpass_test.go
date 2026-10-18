@@ -2,86 +2,172 @@ package main
 
 import (
 	"bytes"
-	"regexp"
+	"math"
 	"strings"
 	"testing"
 )
 
-func TestGenerateShape(t *testing.T) {
-	re := regexp.MustCompile(`^[0-9A-HJKMNP-TV-Z]{4}(-[0-9A-HJKMNP-TV-Z]{4}){3}$`)
-	for i := 0; i < 1000; i++ {
-		pw, err := Generate(4, 4)
+var defaults = Options{Runs: 5, RunLen: 4, Symbols: DefaultSymbols}
+
+func splitRuns(s string) []string {
+	var runs []string
+	for i := 0; i < len(s); {
+		j := i
+		for j < len(s) && s[j] == s[i] {
+			j++
+		}
+		runs = append(runs, s[i:j])
+		i = j
+	}
+	return runs
+}
+
+func TestGenerateDefaults(t *testing.T) {
+	for i := 0; i < 500; i++ {
+		res, err := Generate(defaults)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !re.MatchString(pw) {
-			t.Fatalf("unexpected shape: %q", pw)
+		pw := res.Password
+		if len(pw) != 21 {
+			t.Fatalf("len(%q) = %d, want 21", pw, len(pw))
+		}
+		syms := 0
+		var plain strings.Builder
+		for _, r := range pw {
+			if strings.ContainsRune(DefaultSymbols, r) {
+				syms++
+				continue
+			}
+			plain.WriteRune(r)
+		}
+		if syms != 1 {
+			t.Fatalf("%q has %d symbols, want 1", pw, syms)
+		}
+		runs := splitRuns(plain.String())
+		if len(runs) != 5 {
+			t.Fatalf("%q has runs %v, want 5", pw, runs)
+		}
+		for _, r := range runs {
+			if len(r) != 4 {
+				t.Fatalf("%q has run %q, want length 4", pw, r)
+			}
+		}
+		for _, cl := range classes {
+			if !strings.ContainsAny(pw, cl) {
+				t.Fatalf("%q misses class %q", pw, cl)
+			}
+		}
+		if strings.ReplaceAll(res.View, " ", "") != pw {
+			t.Fatalf("view %q does not match %q", res.View, pw)
 		}
 	}
 }
 
-func TestGenerateUsesWholeAlphabet(t *testing.T) {
-	seen := map[rune]bool{}
+func TestGenerateVary(t *testing.T) {
+	o := Options{Runs: 8, RunLen: 3, Vary: true}
+	lens := map[int]bool{}
 	for i := 0; i < 200; i++ {
-		pw, _ := Generate(4, 4)
-		for _, r := range strings.ReplaceAll(pw, "-", "") {
-			seen[r] = true
+		res, err := Generate(o)
+		if err != nil {
+			t.Fatal(err)
+		}
+		runs := splitRuns(res.Password)
+		if len(runs) != 8 {
+			t.Fatalf("%q has %d runs, want 8", res.Password, len(runs))
+		}
+		for _, r := range runs {
+			if len(r) < 1 || len(r) > 3 {
+				t.Fatalf("run %q out of range", r)
+			}
+			lens[len(r)] = true
 		}
 	}
-	if len(seen) != len(Alphabet) {
-		t.Fatalf("saw %d symbols, want %d", len(seen), len(Alphabet))
+	if len(lens) != 3 {
+		t.Fatalf("saw run lengths %v, want 1..3", lens)
 	}
 }
 
-func TestGenerateRejectsBadArgs(t *testing.T) {
-	if _, err := Generate(0, 4); err == nil {
-		t.Fatal("want error for 0 groups")
-	}
-}
-
-func TestNormalize(t *testing.T) {
-	cases := []struct{ in, want string }{
-		{"7KQM-2HXD-9RTF-4WBN", "7KQM-2HXD-9RTF-4WBN"},
-		{"7kqm 2hxd 9rtf 4wbn", "7KQM-2HXD-9RTF-4WBN"},
-		{"oil0", "0110"},
-		{"7KQM2HXD9", "7KQM-2HXD-9"},
-	}
-	for _, c := range cases {
-		got, err := Normalize(c.in, 4)
-		if err != nil || got != c.want {
-			t.Errorf("Normalize(%q) = %q, %v; want %q", c.in, got, err, c.want)
-		}
-	}
-}
-
-func TestNormalizeRejects(t *testing.T) {
-	for _, in := range []string{"", "--", "ABCU", "AB#C"} {
-		if _, err := Normalize(in, 4); err == nil {
-			t.Errorf("Normalize(%q): want error", in)
+func TestGenerateNoAmbiguous(t *testing.T) {
+	for i := 0; i < 300; i++ {
+		res, _ := Generate(defaults)
+		if strings.ContainsAny(res.Password, "0O1lIo") {
+			t.Fatalf("%q contains a look-alike", res.Password)
 		}
 	}
 }
 
-func TestRunGenerate(t *testing.T) {
+func TestGenerateRejectsBadOptions(t *testing.T) {
+	for _, o := range []Options{{Runs: 2, RunLen: 4}, {Runs: 5, RunLen: 0}} {
+		if _, err := Generate(o); err == nil {
+			t.Errorf("%+v: want error", o)
+		}
+	}
+}
+
+// bruteCount enumerates run characters for tiny alphabets to check Estimate's DP.
+func TestEstimateMatchesBruteForce(t *testing.T) {
+	saved := classes
+	defer func() { classes = saved }()
+	classes = []string{"ab", "C", "34"}
+	all := strings.Join(classes, "")
+	o := Options{Runs: 4, RunLen: 1}
+	count := 0
+	var walk func(prefix string)
+	walk = func(prefix string) {
+		if len(prefix) == o.Runs {
+			for _, cl := range classes {
+				if !strings.ContainsAny(prefix, cl) {
+					return
+				}
+			}
+			count++
+			return
+		}
+		for i := 0; i < len(all); i++ {
+			if len(prefix) > 0 && prefix[len(prefix)-1] == all[i] {
+				continue
+			}
+			walk(prefix + string(all[i]))
+		}
+	}
+	walk("")
+	got := Estimate(o, o.Runs).Known
+	if want := math.Log2(float64(count)); math.Abs(got-want) > 1e-9 {
+		t.Fatalf("Estimate = %.6f bits, brute force = %.6f", got, want)
+	}
+}
+
+func TestEstimateDefaults(t *testing.T) {
+	s := Estimate(defaults, 21)
+	if s.Known < 30 || s.Known > 40 {
+		t.Fatalf("known = %.1f, want about 35", s.Known)
+	}
+	if s.Naive <= s.Known {
+		t.Fatalf("naive %.1f should exceed known %.1f", s.Naive, s.Known)
+	}
+}
+
+func TestRun(t *testing.T) {
 	var out, errOut bytes.Buffer
-	if code := run([]string{"-g", "3", "-n", "2"}, &out, &errOut); code != 0 {
+	if code := run([]string{"-c", "2", "-r", "6"}, &out, &errOut); code != 0 {
 		t.Fatalf("exit %d: %s", code, errOut.String())
 	}
 	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
-	if len(lines) != 2 || len(lines[0]) != 14 {
-		t.Fatalf("unexpected output: %q", out.String())
+	if len(lines) != 2 || len(lines[0]) != 25 {
+		t.Fatalf("unexpected stdout: %q", out.String())
 	}
-	if errOut.String() != "60 bits\n" {
-		t.Fatalf("unexpected stderr: %q", errOut.String())
+	if !strings.Contains(errOut.String(), "known") {
+		t.Fatalf("stderr lacks strength: %q", errOut.String())
 	}
 }
 
-func TestRunNormalize(t *testing.T) {
+func TestRunQuiet(t *testing.T) {
 	var out, errOut bytes.Buffer
-	if code := run([]string{"normalize", "7kqm", "2hxd"}, &out, &errOut); code != 0 {
-		t.Fatalf("exit %d: %s", code, errOut.String())
+	if code := run([]string{"-q", "-s", ""}, &out, &errOut); code != 0 {
+		t.Fatalf("exit %d", code)
 	}
-	if out.String() != "7KQM-2HXD\n" {
-		t.Fatalf("unexpected output: %q", out.String())
+	if errOut.Len() != 0 || len(strings.TrimSpace(out.String())) != 20 {
+		t.Fatalf("stdout %q stderr %q", out.String(), errOut.String())
 	}
 }
