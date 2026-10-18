@@ -1,10 +1,10 @@
 # passssgen
 
-手入力が必要になっても打ちやすいパスワードを出す CLI。半分ジョーク、でも実用。
+A CLI that generates passwords you can still type by hand. Half joke, fully usable.
 
-名前は `pa ssss gen`。真ん中に 4 文字のラン `ssss` が入っている。
+The name reads `pa ssss gen`: a 4-character run, `ssss`, sits in the middle.
 
-同じ文字の連続 (ラン) を並べ、記号は 1 個だけ。強度は **このアルゴリズムを知っている攻撃者** 基準の bit 数で正直に出す。
+A password is a row of runs (one character repeated) plus a single symbol. Strength is reported honestly, in bits, against **an attacker who knows this algorithm**.
 
 ```console
 $ passssgen
@@ -18,55 +18,55 @@ ccccggggEEEE6666jjjj2222YYYY6666ddddVVVVZZZZ4444LL@LL
   53 chars, known 83.3 bits, naive 347.4 bits
 ```
 
-stdout はパスワードだけ。ランの区切り表示と強度は stderr なので `passssgen | pbcopy` でもパスワードだけ渡る。
+stdout gets only the password. The run view and strength go to stderr, so `passssgen | pbcopy` copies just the password.
 
-## 規則
+## Rules
 
-| 項目 | 内容 |
+| Item | Rule |
 | --- | --- |
-| ラン | 同じ文字を `-b` 文字 (既定 4) 続ける。隣のランとは必ず違う文字 |
-| 文字種 | 小文字・大文字・数字を全部使い、記号を 1 個足す (`-s ""` なら記号なし) |
-| 紛らわしい文字 | `0 O o 1 l I` を使わない |
-| 記号 | `! @ . - $ ?` から 1 個、ランダムな位置に。多くのサイトで通る記号だけにして再設定を避ける |
-| 乱数 | `crypto/rand`。条件を満たさない候補は捨てて引き直すので偏らない |
+| Runs | Each run repeats one character `-b` times (default 4). Neighbouring runs always differ |
+| Classes | Lowercase, uppercase and digits all appear, plus one symbol (none with `-s ""`) |
+| Look-alikes | `0 O o 1 l I` are never used |
+| Symbol | One of `! @ . - $ ?` at a random position. Only symbols most sites accept, so you don't get stuck at a password form |
+| Randomness | `crypto/rand`. Candidates that break a rule are thrown away and redrawn, so there is no bias |
 
-## 強度
+## Strength
 
-| 表示 | 意味 |
+| Label | Meaning |
 | --- | --- |
-| `known` | passssgen とそのオプション、さらにパスワードの長さを知る攻撃者に対する推測空間。**こちらが本当の強度**。長さは伏せ字欄の `●` の数などで漏れるので既知として扱う |
-| `naive` | 同じ長さの印字可能 ASCII 94 文字 (空白を除く) を総当たりする攻撃者。参考値 |
+| `known` | Guessing space for an attacker who knows passssgen, its flags and the password length. **This is the real strength.** The length is treated as known because it leaks, e.g. through the dots in a masked field |
+| `naive` | An attacker brute-forcing the 94 printable ASCII characters (no space) at the same length. For reference only |
 
-長さは強度にならない。効くのは **ランの数**。
+Length does not make it strong; **the number of runs** does.
 
-| オプション | 長さ | known |
+| Options | Length | known |
 | --- | --- | --- |
-| 既定 (`-r 5`) | 21 | 約 35 bit: ログイン回数制限のあるオンライン専用 |
-| `-r 13` | 53 | 約 83 bit: 記号混じりランダム 12 文字 (79 bit) 相当 |
-| `-j 1` | 約 21 | 平均 約 40 bit (最低 約 34): ランの長さが 3〜5 でぶれる |
-| `-r 11 -j 1` | 約 45 | 平均 約 85 bit (最低 約 72): 固定 (`-r 13`) より 8 文字短い |
+| default (`-r 5`) | 21 | ~35 bits: online logins with rate limiting only |
+| `-r 13` | 53 | ~83 bits: on par with 12 random characters including symbols (79 bits) |
+| `-j 1` | ~21 | ~40 bits on average (min ~34): run lengths vary from 3 to 5 |
+| `-r 11 -j 1` | ~45 | ~85 bits on average (min ~72): 8 characters shorter than fixed `-r 13` |
 
-`-j` の強度はパスワードごとに変わる。長さが分かると、ランの長さの組み合わせはその合計に合うものだけに絞られる。全ランが最短や最長になったときのように極端な長さだと組み合わせが少なく、弱くなる。出力の `known` を見て、足りなければ引き直す。
+With `-j`, strength varies per password. Once the length is known, only run lengths that add up to it remain. At extreme lengths, such as every run at its shortest or longest, few combinations remain and the password is weaker. Check `known` in the output and generate again if it falls short.
 
-## 使い方
+## Usage
 
 ```
 passssgen [-r runs] [-b len] [-j jitter] [-s symbols] [-c count] [-q]
 ```
 
-| フラグ | 既定 | 内容 |
+| Flag | Default | Description |
 | --- | --- | --- |
-| `-r` | 5 | ランの数 |
-| `-b` | 4 | 1 ランの文字数 (ぶれの中心) |
-| `-j` | 0 | ランの長さのぶれ幅。`-b 4 -j 1` なら 3〜5 文字。強度が増える代わりに、区切り表示を見て数える手間が出る |
-| `-s` | `!@.-$?` | 記号の候補。重複のない ASCII 記号のみ (英数字・空白・非 ASCII は不可)。`""` で記号なし |
-| `-c` | 1 | 生成数。1 以上 |
-| `-q` | off | stderr のラン区切り表示と強度を出さない |
+| `-r` | 5 | Number of runs in one password |
+| `-b` | 4 | Characters per run (the centre when `-j` is set) |
+| `-j` | 0 | How far run lengths may vary. `-b 4 -j 1` gives 3 to 5. Adds strength, but you have to count characters from the run view |
+| `-s` | `!@.-$?` | Symbol candidates. Distinct ASCII punctuation only (no letters, digits, spaces or non-ASCII). `""` for no symbol |
+| `-c` | 1 | Number of passwords to print, at least 1 |
+| `-q` | off | Hide the run view and strength on stderr |
 
-## インストール
+## Install
 
 ```sh
 go install github.com/elzup/passssgen@latest
 ```
 
-または `v*` タグで GitHub Actions がビルドするリリースのバイナリ。
+Or grab a binary from the releases, built by GitHub Actions on `v*` tags.
