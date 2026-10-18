@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"math"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -127,23 +128,35 @@ func TestGenerateTinyClasses(t *testing.T) {
 }
 
 func TestGenerateSymbolPositions(t *testing.T) {
-	o := Options{Runs: 3, RunLen: 1, Symbols: "!"}
-	seen := map[int]bool{}
-	for i := 0; i < 500; i++ {
-		res, err := Generate(o)
-		if err != nil {
-			t.Fatal(err)
+	for _, tc := range []struct {
+		anywhere bool
+		want     []int
+	}{
+		// 3 runs of 2 leave 4 places between runs, both ends included
+		{false, []int{0, 2, 4, 6}},
+		// or 7 places when the symbol may split a run
+		{true, []int{0, 1, 2, 3, 4, 5, 6}},
+	} {
+		o := Options{Runs: 3, RunLen: 2, Symbols: "!", Anywhere: tc.anywhere}
+		seen := map[int]bool{}
+		for i := 0; i < 700; i++ {
+			res, err := Generate(o)
+			if err != nil {
+				t.Fatal(err)
+			}
+			pos := strings.IndexByte(res.Password, '!')
+			if !slices.Contains(tc.want, pos) {
+				t.Fatalf("anywhere=%v: symbol at %d in %q", tc.anywhere, pos, res.Password)
+			}
+			seen[pos] = true
+			if strings.ReplaceAll(res.View, " ", "") != res.Password {
+				t.Fatalf("view %q does not match %q", res.View, res.Password)
+			}
 		}
-		pos := strings.IndexByte(res.Password, '!')
-		seen[pos] = true
-		if strings.ReplaceAll(res.View, " ", "") != res.Password {
-			t.Fatalf("view %q does not match %q", res.View, res.Password)
-		}
-	}
-	// 3 run characters leave 4 places for the symbol, both ends included.
-	for pos := 0; pos <= 3; pos++ {
-		if !seen[pos] {
-			t.Errorf("symbol never at %d, saw %v", pos, seen)
+		for _, pos := range tc.want {
+			if !seen[pos] {
+				t.Errorf("anywhere=%v: symbol never at %d, saw %v", tc.anywhere, pos, seen)
+			}
 		}
 	}
 }
@@ -166,15 +179,18 @@ func TestGenerateRejectsBadOptions(t *testing.T) {
 // enumerate lists every password Generate can return for o, by length.
 func enumerate(o Options, runChars []string) map[int]map[string]bool {
 	byLen := map[int]map[string]bool{}
-	var walk func(i int, plain string, runs []string)
-	walk = func(i int, plain string, runs []string) {
+	// cuts holds the offsets between runs, both ends included.
+	var walk func(i int, plain string, runs []string, cuts []int)
+	walk = func(i int, plain string, runs []string, cuts []int) {
 		if i == o.Runs {
 			pws := []string{plain}
 			if o.Symbols != "" {
 				pws = nil
 				for _, sym := range o.Symbols {
 					for pos := 0; pos <= len(plain); pos++ {
-						pws = append(pws, plain[:pos]+string(sym)+plain[pos:])
+						if o.Anywhere || slices.Contains(cuts, pos) {
+							pws = append(pws, plain[:pos]+string(sym)+plain[pos:])
+						}
 					}
 				}
 			}
@@ -187,12 +203,13 @@ func enumerate(o Options, runChars []string) map[int]map[string]bool {
 			return
 		}
 		for n := o.RunLen - o.Jitter; n <= o.RunLen+o.Jitter; n++ {
-			walk(i+1, plain+strings.Repeat(runs[i], n), runs)
+			next := plain + strings.Repeat(runs[i], n)
+			walk(i+1, next, runs, append(slices.Clone(cuts), len(next)))
 		}
 	}
 	for _, rc := range runChars {
 		runs := strings.Split(rc, "")
-		walk(0, "", runs)
+		walk(0, "", runs, []int{0})
 	}
 	return byLen
 }
@@ -228,6 +245,8 @@ func TestEstimateMatchesBruteForce(t *testing.T) {
 		{Runs: 4, RunLen: 2, Jitter: 1},
 		{Runs: 4, RunLen: 3, Jitter: 2},
 		{Runs: 4, RunLen: 2, Jitter: 1, Symbols: "!@"},
+		{Runs: 4, RunLen: 3, Symbols: "!@", Anywhere: true},
+		{Runs: 4, RunLen: 2, Jitter: 1, Symbols: "!@", Anywhere: true},
 	} {
 		for length, pws := range enumerate(o, runChars) {
 			got := Estimate(o, length).Known

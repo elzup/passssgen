@@ -25,6 +25,9 @@ type Options struct {
 	RunLen  int    // characters per run (the centre when Jitter > 0)
 	Jitter  int    // run lengths are random in RunLen-Jitter..RunLen+Jitter
 	Symbols string // candidates for the single inserted symbol; empty disables it
+	// Anywhere lets the symbol land inside a run too. By default it only goes
+	// between runs or at either end, so no run is split while typing.
+	Anywhere bool
 }
 
 func (o Options) validate() error {
@@ -109,7 +112,7 @@ func Generate(o Options) (Result, error) {
 		if !allTrue(used) {
 			continue
 		}
-		return insertSymbol(runs, o.Symbols)
+		return insertSymbol(runs, o)
 	}
 }
 
@@ -122,20 +125,28 @@ func allTrue(bs []bool) bool {
 	return true
 }
 
-func insertSymbol(runs []string, symbols string) (Result, error) {
+func insertSymbol(runs []string, o Options) (Result, error) {
 	plain := strings.Join(runs, "")
-	if symbols == "" {
+	if o.Symbols == "" {
 		return Result{plain, strings.Join(runs, " ")}, nil
 	}
-	k, err := randInt(len(symbols))
+	k, err := randInt(len(o.Symbols))
 	if err != nil {
 		return Result{}, err
 	}
-	pos, err := randInt(len(plain) + 1)
+	pos, err := randInt(symbolSlots(o, len(plain)))
 	if err != nil {
 		return Result{}, err
 	}
-	sym := string(symbols[k])
+	if !o.Anywhere {
+		// pos is a boundary index; turn it into the offset after pos runs.
+		b := pos
+		pos = 0
+		for _, r := range runs[:b] {
+			pos += len(r)
+		}
+	}
+	sym := string(o.Symbols[k])
 	// Place the symbol inside the view too, so the view reads the same.
 	view := make([]string, len(runs))
 	offset := 0
@@ -149,6 +160,15 @@ func insertSymbol(runs []string, symbols string) (Result, error) {
 		view[i] = r
 	}
 	return Result{plain[:pos] + sym + plain[pos:], strings.Join(view, " ")}, nil
+}
+
+// symbolSlots is how many places the symbol can go in a password whose runs
+// add up to plainLen characters.
+func symbolSlots(o Options, plainLen int) int {
+	if o.Anywhere {
+		return plainLen + 1
+	}
+	return o.Runs + 1
 }
 
 // Strength reports the guessing space in bits.
@@ -208,7 +228,7 @@ func Estimate(o Options, length int) Strength {
 	}
 	bits := math.Log2(total) + math.Log2(lengthSplits(o, plainLen))
 	if o.Symbols != "" {
-		bits += math.Log2(float64(len(o.Symbols))) + math.Log2(float64(plainLen+1))
+		bits += math.Log2(float64(len(o.Symbols))) + math.Log2(float64(symbolSlots(o, plainLen)))
 	}
 	return Strength{Known: bits, Naive: float64(length) * math.Log2(94)}
 }

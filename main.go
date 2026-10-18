@@ -17,8 +17,10 @@ const usage = `usage: passssgen [flags]
   -b len      characters per run (default 4)
   -j n        let each run length wobble by up to n around len (default 0)
   -s symbols  candidates for the single symbol (default "!@.-$?", "" for none)
-  -c count    number of passwords (default 1)
-  -q          print only the password
+              distinct ASCII punctuation only
+  -a          let the symbol land inside a run, not only between runs
+  -c count    number of passwords, >= 1 (default 1)
+  -q          hide the run view and strength on stderr
   -version    print version
 
 stderr shows the runs separated by spaces and the strength in bits:
@@ -40,6 +42,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	fs.IntVar(&o.RunLen, "b", 4, "")
 	fs.IntVar(&o.Jitter, "j", 0, "")
 	fs.StringVar(&o.Symbols, "s", DefaultSymbols, "")
+	fs.BoolVar(&o.Anywhere, "a", false, "")
 	count := fs.Int("c", 1, "")
 	quiet := fs.Bool("q", false, "")
 	showVersion := fs.Bool("version", false, "")
