@@ -1,24 +1,24 @@
-# ppppassss
+# passssgen
 
 手入力が必要になっても打ちやすいパスワードを出す CLI。半分ジョーク、でも実用。
 
-名前は `pppp a ssss` というランの並び (文字種と記号の条件は満たしていないので、ppppassss 自身はこれを出さない)。
+名前は `pa ssss gen`。真ん中に 4 文字のラン `ssss` が入っている。
 
 同じ文字の連続 (ラン) を並べ、記号は 1 個だけ。強度は **このアルゴリズムを知っている攻撃者** 基準の bit 数で正直に出す。
 
 ```console
-$ ppppassss
+$ passssgen
 ppppLLLLeeeemmmm222@2
   pppp LLLL eeee mmmm 222@2
   21 chars, known 34.8 bits, naive 137.6 bits
 
-$ ppppassss -r 13
+$ passssgen -r 13
 ccccggggEEEE6666jjjj2222YYYY6666ddddVVVVZZZZ4444LL@LL
   cccc gggg EEEE 6666 jjjj 2222 YYYY 6666 dddd VVVV ZZZZ 4444 LL@LL
   53 chars, known 83.3 bits, naive 347.4 bits
 ```
 
-stdout はパスワードだけ。ランの区切り表示と強度は stderr なので `ppppassss | pbcopy` でもパスワードだけ渡る。
+stdout はパスワードだけ。ランの区切り表示と強度は stderr なので `passssgen | pbcopy` でもパスワードだけ渡る。
 
 ## 規則
 
@@ -34,7 +34,7 @@ stdout はパスワードだけ。ランの区切り表示と強度は stderr �
 
 | 表示 | 意味 |
 | --- | --- |
-| `known` | ppppassss とそのオプションを知る攻撃者に対する推測空間。**こちらが本当の強度** |
+| `known` | passssgen とそのオプションを知る攻撃者に対する推測空間。**こちらが本当の強度** |
 | `naive` | 同じ長さの印字可能 ASCII 全部を総当たりする攻撃者。参考値 |
 
 長さは強度にならない。効くのは **ランの数**。
@@ -49,7 +49,7 @@ stdout はパスワードだけ。ランの区切り表示と強度は stderr �
 ## 使い方
 
 ```
-ppppassss [-r runs] [-b len] [-j jitter] [-s symbols] [-c count] [-q]
+passssgen [-r runs] [-b len] [-j jitter] [-s symbols] [-c count] [-q]
 ```
 
 | フラグ | 既定 | 内容 |
@@ -64,7 +64,7 @@ ppppassss [-r runs] [-b len] [-j jitter] [-s symbols] [-c count] [-q]
 ## インストール
 
 ```sh
-go install github.com/elzup/ppppassss@latest
+go install github.com/elzup/passssgen@latest
 ```
 
 または `v*` タグで GitHub Actions がビルドするリリースのバイナリ。

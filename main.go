@@ -1,4 +1,4 @@
-// ppppassss generates passwords that are easy to type by hand: runs of one
+// passssgen generates passwords that are easy to type by hand: runs of one
 // repeated character, every character class, and a single common symbol.
 package main
 
@@ -11,7 +11,7 @@ import (
 
 var version = "dev"
 
-const usage = `usage: ppppassss [flags]
+const usage = `usage: passssgen [flags]
 
   -r runs     number of runs (default 5)
   -b len      characters per run (default 4)
@@ -22,7 +22,7 @@ const usage = `usage: ppppassss [flags]
   -version    print version
 
 stderr shows the runs separated by spaces and the strength in bits:
-  known  attacker knows ppppassss and its flags (the honest number)
+  known  attacker knows passssgen and its flags (the honest number)
   naive  attacker brute-forces all printable ASCII of the same length
 `
 
@@ -31,7 +31,7 @@ func main() {
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("ppppassss", flag.ContinueOnError)
+	fs := flag.NewFlagSet("passssgen", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.Usage = func() { fmt.Fprint(stderr, usage) }
 	o := Options{}
@@ -52,7 +52,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	for i := 0; i < *count; i++ {
 		res, err := Generate(o)
 		if err != nil {
-			fmt.Fprintln(stderr, "ppppassss:", err)
+			fmt.Fprintln(stderr, "passssgen:", err)
 			return 1
 		}
 		fmt.Fprintln(stdout, res.Password)
