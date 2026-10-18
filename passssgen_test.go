@@ -254,8 +254,7 @@ func TestRun(t *testing.T) {
 		t.Fatalf("exit %d: %s", code, errOut.String())
 	}
 	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
-	// 6 runs of 3..5 characters plus the symbol
-	if len(lines) != 2 || len(lines[0]) < 19 || len(lines[0]) > 31 {
+	if len(lines) != 2 || len(lines[0]) != 25 {
 		t.Fatalf("unexpected stdout: %q", out.String())
 	}
 	if !strings.Contains(errOut.String(), "known") {
@@ -265,7 +264,7 @@ func TestRun(t *testing.T) {
 
 func TestRunQuiet(t *testing.T) {
 	var out, errOut bytes.Buffer
-	if code := run([]string{"-q", "-s", "", "-j", "0"}, &out, &errOut); code != 0 {
+	if code := run([]string{"-q", "-s", ""}, &out, &errOut); code != 0 {
 		t.Fatalf("exit %d", code)
 	}
 	if errOut.Len() != 0 || len(strings.TrimSpace(out.String())) != 20 {
