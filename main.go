@@ -15,7 +15,7 @@ const usage = `usage: hwpass [flags]
 
   -r runs     number of runs (default 5)
   -b len      characters per run (default 4)
-  -v          vary run length randomly in 1..len (stronger, but you count)
+  -j n        let each run length wobble by up to n around len (default 0)
   -s symbols  candidates for the single symbol (default "!@.-$?", "" for none)
   -c count    number of passwords (default 1)
   -q          print only the password
@@ -37,7 +37,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	o := Options{}
 	fs.IntVar(&o.Runs, "r", 5, "")
 	fs.IntVar(&o.RunLen, "b", 4, "")
-	fs.BoolVar(&o.Vary, "v", false, "")
+	fs.IntVar(&o.Jitter, "j", 0, "")
 	fs.StringVar(&o.Symbols, "s", DefaultSymbols, "")
 	count := fs.Int("c", 1, "")
 	quiet := fs.Bool("q", false, "")

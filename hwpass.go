@@ -22,8 +22,8 @@ const DefaultSymbols = "!@.-$?"
 // Options controls the shape of a password.
 type Options struct {
 	Runs    int    // number of runs (blocks of one repeated character)
-	RunLen  int    // characters per run, or the maximum when Vary is set
-	Vary    bool   // run lengths are random in 1..RunLen
+	RunLen  int    // characters per run (the centre when Jitter > 0)
+	Jitter  int    // run lengths are random in RunLen-Jitter..RunLen+Jitter
 	Symbols string // candidates for the single inserted symbol; empty disables it
 }
 
@@ -31,8 +31,11 @@ func (o Options) validate() error {
 	if o.Runs < len(classes) {
 		return fmt.Errorf("runs must be >= %d to use every class", len(classes))
 	}
-	if o.RunLen < 1 {
-		return fmt.Errorf("run length must be >= 1")
+	if o.Jitter < 0 {
+		return fmt.Errorf("jitter must be >= 0")
+	}
+	if o.RunLen-o.Jitter < 1 {
+		return fmt.Errorf("run length minus jitter must be >= 1")
 	}
 	return nil
 }
@@ -82,12 +85,12 @@ func Generate(o Options) (Result, error) {
 				}
 			}
 			n := o.RunLen
-			if o.Vary {
-				k, err := randInt(o.RunLen)
+			if o.Jitter > 0 {
+				k, err := randInt(2*o.Jitter + 1)
 				if err != nil {
 					return Result{}, err
 				}
-				n = k + 1
+				n += k - o.Jitter
 			}
 			runs[i] = strings.Repeat(string(c), n)
 		}
@@ -187,11 +190,11 @@ func Estimate(o Options, length int) Strength {
 		total += v
 	}
 	bits := math.Log2(total)
-	if o.Vary {
-		bits += float64(o.Runs) * math.Log2(float64(o.RunLen))
+	if o.Jitter > 0 {
+		bits += float64(o.Runs) * math.Log2(float64(2*o.Jitter+1))
 	}
 	if o.Symbols != "" {
-		// With -v the insertion points depend on run lengths; use this
+		// With jitter the insertion points depend on run lengths; use this
 		// password's length as the estimate.
 		plainLen := length - 1
 		bits += math.Log2(float64(len(o.Symbols))) + math.Log2(float64(plainLen+1))

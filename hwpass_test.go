@@ -64,8 +64,8 @@ func TestGenerateDefaults(t *testing.T) {
 	}
 }
 
-func TestGenerateVary(t *testing.T) {
-	o := Options{Runs: 8, RunLen: 3, Vary: true}
+func TestGenerateJitter(t *testing.T) {
+	o := Options{Runs: 8, RunLen: 4, Jitter: 1}
 	lens := map[int]bool{}
 	for i := 0; i < 200; i++ {
 		res, err := Generate(o)
@@ -77,14 +77,14 @@ func TestGenerateVary(t *testing.T) {
 			t.Fatalf("%q has %d runs, want 8", res.Password, len(runs))
 		}
 		for _, r := range runs {
-			if len(r) < 1 || len(r) > 3 {
+			if len(r) < 3 || len(r) > 5 {
 				t.Fatalf("run %q out of range", r)
 			}
 			lens[len(r)] = true
 		}
 	}
 	if len(lens) != 3 {
-		t.Fatalf("saw run lengths %v, want 1..3", lens)
+		t.Fatalf("saw run lengths %v, want 3..5", lens)
 	}
 }
 
@@ -98,7 +98,7 @@ func TestGenerateNoAmbiguous(t *testing.T) {
 }
 
 func TestGenerateRejectsBadOptions(t *testing.T) {
-	for _, o := range []Options{{Runs: 2, RunLen: 4}, {Runs: 5, RunLen: 0}} {
+	for _, o := range []Options{{Runs: 2, RunLen: 4}, {Runs: 5, RunLen: 0}, {Runs: 5, RunLen: 2, Jitter: 2}, {Runs: 5, RunLen: 4, Jitter: -1}} {
 		if _, err := Generate(o); err == nil {
 			t.Errorf("%+v: want error", o)
 		}
