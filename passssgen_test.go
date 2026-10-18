@@ -100,7 +100,9 @@ func TestGenerateNoAmbiguous(t *testing.T) {
 }
 
 func TestGenerateAcceptsBoundaryOptions(t *testing.T) {
-	for _, o := range []Options{{Runs: 3, RunLen: 1}, {Runs: 5, RunLen: 2, Jitter: 1}} {
+	for _, o := range []Options{{Runs: 3, RunLen: 1}, {Runs: 5, RunLen: 2, Jitter: 1},
+		// ASCII punctuation right next to the alnum and printable edges
+		{Runs: 5, RunLen: 4, Symbols: "!~/:@[`{"}} {
 		if _, err := Generate(o); err != nil {
 			t.Errorf("%+v: %v", o, err)
 		}
@@ -147,58 +149,91 @@ func TestGenerateSymbolPositions(t *testing.T) {
 }
 
 func TestGenerateRejectsBadOptions(t *testing.T) {
-	for _, o := range []Options{{Runs: 2, RunLen: 4}, {Runs: 5, RunLen: 0}, {Runs: 5, RunLen: 2, Jitter: 2}, {Runs: 5, RunLen: 4, Jitter: -1}} {
+	for _, o := range []Options{{Runs: 2, RunLen: 4}, {Runs: 5, RunLen: 0}, {Runs: 5, RunLen: 2, Jitter: 2}, {Runs: 5, RunLen: 4, Jitter: -1},
+		{Runs: 5, RunLen: 4, Symbols: "!!"}, {Runs: 5, RunLen: 4, Symbols: "a!"}, {Runs: 5, RunLen: 4, Symbols: " "},
+		{Runs: 5, RunLen: 4, Symbols: "★"}} {
 		if _, err := Generate(o); err == nil {
 			t.Errorf("%+v: want error", o)
 		}
 	}
-}
-
-// bruteCount enumerates run characters for tiny alphabets to check Estimate's DP.
-func bruteCount(runs int) int {
-	all := strings.Join(classes, "")
-	count := 0
-	var walk func(prefix string)
-	walk = func(prefix string) {
-		if len(prefix) == runs {
-			for _, cl := range classes {
-				if !strings.ContainsAny(prefix, cl) {
-					return
-				}
-			}
-			count++
-			return
-		}
-		for i := 0; i < len(all); i++ {
-			if len(prefix) > 0 && prefix[len(prefix)-1] == all[i] {
-				continue
-			}
-			walk(prefix + string(all[i]))
+	for _, c := range "azAZ09\x7f" {
+		if _, err := Generate(Options{Runs: 5, RunLen: 4, Symbols: "!" + string(c)}); err == nil {
+			t.Errorf("symbol %q: want error", c)
 		}
 	}
-	walk("")
-	return count
+}
+
+// enumerate lists every password Generate can return for o, by length.
+func enumerate(o Options, runChars []string) map[int]map[string]bool {
+	byLen := map[int]map[string]bool{}
+	var walk func(i int, plain string, runs []string)
+	walk = func(i int, plain string, runs []string) {
+		if i == o.Runs {
+			pws := []string{plain}
+			if o.Symbols != "" {
+				pws = nil
+				for _, sym := range o.Symbols {
+					for pos := 0; pos <= len(plain); pos++ {
+						pws = append(pws, plain[:pos]+string(sym)+plain[pos:])
+					}
+				}
+			}
+			for _, pw := range pws {
+				if byLen[len(pw)] == nil {
+					byLen[len(pw)] = map[string]bool{}
+				}
+				byLen[len(pw)][pw] = true
+			}
+			return
+		}
+		for n := o.RunLen - o.Jitter; n <= o.RunLen+o.Jitter; n++ {
+			walk(i+1, plain+strings.Repeat(runs[i], n), runs)
+		}
+	}
+	for _, rc := range runChars {
+		runs := strings.Split(rc, "")
+		walk(0, "", runs)
+	}
+	return byLen
 }
 
 func TestEstimateMatchesBruteForce(t *testing.T) {
 	saved := classes
 	defer func() { classes = saved }()
 	classes = []string{"ab", "C", "34"}
-	runChars := math.Log2(float64(bruteCount(4)))
-	for _, tc := range []struct {
-		o      Options
-		length int
-		want   float64
-	}{
-		{Options{Runs: 4, RunLen: 1}, 4, runChars},
-		// each run length has 3 choices
-		{Options{Runs: 4, RunLen: 2, Jitter: 1}, 8, runChars + 4*math.Log2(3)},
-		{Options{Runs: 4, RunLen: 3, Jitter: 2}, 12, runChars + 4*math.Log2(5)},
-		// 2 symbols at any of 4*3+1 positions
-		{Options{Runs: 4, RunLen: 3, Symbols: "!@"}, 13, runChars + 1 + math.Log2(13)},
+	// run characters: no neighbour repeats, every class present
+	var runChars []string
+	all := strings.Join(classes, "")
+	var walk func(prefix string)
+	walk = func(prefix string) {
+		if len(prefix) == 4 {
+			for _, cl := range classes {
+				if !strings.ContainsAny(prefix, cl) {
+					return
+				}
+			}
+			runChars = append(runChars, prefix)
+			return
+		}
+		for i := 0; i < len(all); i++ {
+			if len(prefix) == 0 || prefix[len(prefix)-1] != all[i] {
+				walk(prefix + string(all[i]))
+			}
+		}
+	}
+	walk("")
+	for _, o := range []Options{
+		{Runs: 4, RunLen: 1},
+		{Runs: 4, RunLen: 3, Symbols: "!@"},
+		{Runs: 4, RunLen: 2, Jitter: 1},
+		{Runs: 4, RunLen: 3, Jitter: 2},
+		{Runs: 4, RunLen: 2, Jitter: 1, Symbols: "!@"},
 	} {
-		if got := Estimate(tc.o, tc.length).Known; math.Abs(got-tc.want) > 1e-9 {
-			t.Errorf("%+v: Estimate = %.6f bits, brute force = %.6f", tc.o, got, tc.want)
+		for length, pws := range enumerate(o, runChars) {
+			got := Estimate(o, length).Known
+			if want := math.Log2(float64(len(pws))); math.Abs(got-want) > 1e-9 {
+				t.Errorf("%+v length %d: Estimate = %.6f bits, brute force = %.6f", o, length, got, want)
+			}
 		}
 	}
 }
@@ -246,6 +281,9 @@ func TestRunExitCodes(t *testing.T) {
 	}{
 		{[]string{"-version"}, 0, "dev\n", ""},
 		{[]string{"-h"}, 2, "", "usage: passssgen"},
+		{[]string{"-c", "0"}, 2, "", "count must be >= 1"},
+		{[]string{"-c", "-1"}, 2, "", "count must be >= 1"},
+		{[]string{"-s", "!!"}, 1, "", "symbols must be distinct"},
 		{[]string{"-x"}, 2, "", "usage: passssgen"},
 		{[]string{"-r", "2"}, 1, "", "runs must be >= 3"},
 	} {

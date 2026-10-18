@@ -37,7 +37,19 @@ func (o Options) validate() error {
 	if o.RunLen-o.Jitter < 1 {
 		return fmt.Errorf("run length minus jitter must be >= 1")
 	}
+	// Symbols are picked and counted per byte, so each must be one distinct
+	// ASCII character that cannot merge into a run.
+	for i := 0; i < len(o.Symbols); i++ {
+		c := o.Symbols[i]
+		if c <= ' ' || c > '~' || isAlnum(c) || strings.IndexByte(o.Symbols[:i], c) >= 0 {
+			return fmt.Errorf("symbols must be distinct ASCII punctuation, got %q", o.Symbols)
+		}
+	}
 	return nil
+}
+
+func isAlnum(c byte) bool {
+	return 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z' || '0' <= c && c <= '9'
 }
 
 // Result is a generated password plus a view that shows its runs.
@@ -141,14 +153,15 @@ func insertSymbol(runs []string, symbols string) (Result, error) {
 
 // Strength reports the guessing space in bits.
 type Strength struct {
-	Known float64 // attacker knows this algorithm and its options
-	Naive float64 // attacker brute-forces every printable ASCII string of this length
+	Known float64 // attacker knows this algorithm, its options and the length
+	Naive float64 // attacker brute-forces the 94 printable ASCII characters (no space) at this length
 }
 
 // Estimate computes Strength for o and a password of the given length.
-// Known counts every password Generate can return for o: run characters with
-// no neighbour repeats and all classes present, run lengths when varied, and
-// the symbol's choice and position.
+// Known counts every password of that length Generate can return for o: run
+// characters with no neighbour repeats and all classes present, run lengths
+// that add up to the length, and the symbol's choice and position. The length
+// is treated as known because it shows in masked fields and is easy to count.
 func Estimate(o Options, length int) Strength {
 	sizes := make([]float64, len(classes))
 	for i, cl := range classes {
@@ -189,15 +202,31 @@ func Estimate(o Options, length int) Strength {
 	for _, v := range dp[full] {
 		total += v
 	}
-	bits := math.Log2(total)
-	if o.Jitter > 0 {
-		bits += float64(o.Runs) * math.Log2(float64(2*o.Jitter+1))
-	}
+	plainLen := length
 	if o.Symbols != "" {
-		// With jitter the insertion points depend on run lengths; use this
-		// password's length as the estimate.
-		plainLen := length - 1
+		plainLen--
+	}
+	bits := math.Log2(total) + math.Log2(lengthSplits(o, plainLen))
+	if o.Symbols != "" {
 		bits += math.Log2(float64(len(o.Symbols))) + math.Log2(float64(plainLen+1))
 	}
 	return Strength{Known: bits, Naive: float64(length) * math.Log2(94)}
+}
+
+// lengthSplits counts the run lengths in RunLen-Jitter..RunLen+Jitter that add
+// up to total. Every split is equally likely, so it is the guessing space for
+// run lengths once the length is known.
+func lengthSplits(o Options, total int) float64 {
+	ways := make([]float64, total+1)
+	ways[0] = 1
+	for r := 0; r < o.Runs; r++ {
+		next := make([]float64, total+1)
+		for sum, v := range ways {
+			for n := o.RunLen - o.Jitter; n <= o.RunLen+o.Jitter && sum+n <= total; n++ {
+				next[sum+n] += v
+			}
+		}
+		ways = next
+	}
+	return ways[total]
 }

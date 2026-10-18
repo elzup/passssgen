@@ -22,8 +22,9 @@ const usage = `usage: passssgen [flags]
   -version    print version
 
 stderr shows the runs separated by spaces and the strength in bits:
-  known  attacker knows passssgen and its flags (the honest number)
-  naive  attacker brute-forces all printable ASCII of the same length
+  known  attacker knows passssgen, its flags and the length (the honest number)
+  naive  attacker brute-forces the 94 printable ASCII characters (no space)
+         at the same length
 `
 
 func main() {
@@ -48,6 +49,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 	if *showVersion {
 		fmt.Fprintln(stdout, version)
 		return 0
+	}
+	if *count < 1 {
+		fmt.Fprintln(stderr, "passssgen: count must be >= 1")
+		return 2
 	}
 	for i := 0; i < *count; i++ {
 		res, err := Generate(o)
