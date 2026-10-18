@@ -65,26 +65,28 @@ func TestGenerateDefaults(t *testing.T) {
 }
 
 func TestGenerateJitter(t *testing.T) {
-	o := Options{Runs: 8, RunLen: 4, Jitter: 1}
-	lens := map[int]bool{}
-	for i := 0; i < 200; i++ {
-		res, err := Generate(o)
-		if err != nil {
-			t.Fatal(err)
-		}
-		runs := splitRuns(res.Password)
-		if len(runs) != 8 {
-			t.Fatalf("%q has %d runs, want 8", res.Password, len(runs))
-		}
-		for _, r := range runs {
-			if len(r) < 3 || len(r) > 5 {
-				t.Fatalf("run %q out of range", r)
+	for _, j := range []int{1, 2} {
+		o := Options{Runs: 8, RunLen: 4, Jitter: j}
+		lens := map[int]bool{}
+		for i := 0; i < 200; i++ {
+			res, err := Generate(o)
+			if err != nil {
+				t.Fatal(err)
 			}
-			lens[len(r)] = true
+			runs := splitRuns(res.Password)
+			if len(runs) != 8 {
+				t.Fatalf("%q has %d runs, want 8", res.Password, len(runs))
+			}
+			for _, r := range runs {
+				if len(r) < 4-j || len(r) > 4+j {
+					t.Fatalf("jitter %d: run %q out of range", j, r)
+				}
+				lens[len(r)] = true
+			}
 		}
-	}
-	if len(lens) != 3 {
-		t.Fatalf("saw run lengths %v, want 3..5", lens)
+		if len(lens) != 2*j+1 {
+			t.Fatalf("jitter %d: saw run lengths %v, want %d..%d", j, lens, 4-j, 4+j)
+		}
 	}
 }
 
@@ -93,6 +95,53 @@ func TestGenerateNoAmbiguous(t *testing.T) {
 		res, _ := Generate(defaults)
 		if strings.ContainsAny(res.Password, "0O1lIo") {
 			t.Fatalf("%q contains a look-alike", res.Password)
+		}
+	}
+}
+
+func TestGenerateAcceptsBoundaryOptions(t *testing.T) {
+	for _, o := range []Options{{Runs: 3, RunLen: 1}, {Runs: 5, RunLen: 2, Jitter: 1}} {
+		if _, err := Generate(o); err != nil {
+			t.Errorf("%+v: %v", o, err)
+		}
+	}
+}
+
+// Every character must count toward its class, including the first one of
+// each class; otherwise single-character classes could never be satisfied.
+func TestGenerateTinyClasses(t *testing.T) {
+	saved := classes
+	defer func() { classes = saved }()
+	classes = []string{"a", "B", "3"}
+	for i := 0; i < 50; i++ {
+		res, err := Generate(Options{Runs: 3, RunLen: 1})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(res.Password) != 3 {
+			t.Fatalf("%q, want 3 chars", res.Password)
+		}
+	}
+}
+
+func TestGenerateSymbolPositions(t *testing.T) {
+	o := Options{Runs: 3, RunLen: 1, Symbols: "!"}
+	seen := map[int]bool{}
+	for i := 0; i < 500; i++ {
+		res, err := Generate(o)
+		if err != nil {
+			t.Fatal(err)
+		}
+		pos := strings.IndexByte(res.Password, '!')
+		seen[pos] = true
+		if strings.ReplaceAll(res.View, " ", "") != res.Password {
+			t.Fatalf("view %q does not match %q", res.View, res.Password)
+		}
+	}
+	// 3 run characters leave 4 places for the symbol, both ends included.
+	for pos := 0; pos <= 3; pos++ {
+		if !seen[pos] {
+			t.Errorf("symbol never at %d, saw %v", pos, seen)
 		}
 	}
 }
@@ -106,16 +155,12 @@ func TestGenerateRejectsBadOptions(t *testing.T) {
 }
 
 // bruteCount enumerates run characters for tiny alphabets to check Estimate's DP.
-func TestEstimateMatchesBruteForce(t *testing.T) {
-	saved := classes
-	defer func() { classes = saved }()
-	classes = []string{"ab", "C", "34"}
+func bruteCount(runs int) int {
 	all := strings.Join(classes, "")
-	o := Options{Runs: 4, RunLen: 1}
 	count := 0
 	var walk func(prefix string)
 	walk = func(prefix string) {
-		if len(prefix) == o.Runs {
+		if len(prefix) == runs {
 			for _, cl := range classes {
 				if !strings.ContainsAny(prefix, cl) {
 					return
@@ -132,9 +177,29 @@ func TestEstimateMatchesBruteForce(t *testing.T) {
 		}
 	}
 	walk("")
-	got := Estimate(o, o.Runs).Known
-	if want := math.Log2(float64(count)); math.Abs(got-want) > 1e-9 {
-		t.Fatalf("Estimate = %.6f bits, brute force = %.6f", got, want)
+	return count
+}
+
+func TestEstimateMatchesBruteForce(t *testing.T) {
+	saved := classes
+	defer func() { classes = saved }()
+	classes = []string{"ab", "C", "34"}
+	runChars := math.Log2(float64(bruteCount(4)))
+	for _, tc := range []struct {
+		o      Options
+		length int
+		want   float64
+	}{
+		{Options{Runs: 4, RunLen: 1}, 4, runChars},
+		// each run length has 3 choices
+		{Options{Runs: 4, RunLen: 2, Jitter: 1}, 8, runChars + 4*math.Log2(3)},
+		{Options{Runs: 4, RunLen: 3, Jitter: 2}, 12, runChars + 4*math.Log2(5)},
+		// 2 symbols at any of 4*3+1 positions
+		{Options{Runs: 4, RunLen: 3, Symbols: "!@"}, 13, runChars + 1 + math.Log2(13)},
+	} {
+		if got := Estimate(tc.o, tc.length).Known; math.Abs(got-tc.want) > 1e-9 {
+			t.Errorf("%+v: Estimate = %.6f bits, brute force = %.6f", tc.o, got, tc.want)
+		}
 	}
 }
 
@@ -169,5 +234,27 @@ func TestRunQuiet(t *testing.T) {
 	}
 	if errOut.Len() != 0 || len(strings.TrimSpace(out.String())) != 20 {
 		t.Fatalf("stdout %q stderr %q", out.String(), errOut.String())
+	}
+}
+
+func TestRunExitCodes(t *testing.T) {
+	for _, tc := range []struct {
+		args   []string
+		code   int
+		stdout string
+		stderr string
+	}{
+		{[]string{"-version"}, 0, "dev\n", ""},
+		{[]string{"-h"}, 2, "", "usage: passssgen"},
+		{[]string{"-x"}, 2, "", "usage: passssgen"},
+		{[]string{"-r", "2"}, 1, "", "runs must be >= 3"},
+	} {
+		var out, errOut bytes.Buffer
+		if code := run(tc.args, &out, &errOut); code != tc.code {
+			t.Errorf("%v: exit %d, want %d", tc.args, code, tc.code)
+		}
+		if out.String() != tc.stdout || !strings.Contains(errOut.String(), tc.stderr) {
+			t.Errorf("%v: stdout %q stderr %q", tc.args, out.String(), errOut.String())
+		}
 	}
 }
