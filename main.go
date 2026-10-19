@@ -13,17 +13,27 @@ var version = "dev"
 
 const usage = `usage: passssgen [flags]
 
+  -m mode     runs (default) or block
+
+runs mode: runs of one repeated character
   -r runs     number of runs (default 5)
   -b len      characters per run (default 4)
   -j n        let each run length wobble by up to n around len (default 0)
+  -a          let the symbol land inside a run, not only between runs
+
+block mode: uppercase, symbol, digits, lowercase (e.g. YMMUDK@33xwabdu)
+  -u n        uppercase characters (default 6)
+  -d n        digits (default 2)
+  -l n        lowercase characters (default 6)
+
+both modes
   -s symbols  candidates for the single symbol (default "!@.-$?", "" for none)
               distinct ASCII punctuation only
-  -a          let the symbol land inside a run, not only between runs
   -c count    number of passwords, >= 1 (default 1)
-  -q          hide the run view and strength on stderr
+  -q          hide the view and strength on stderr
   -version    print version
 
-stderr shows the runs separated by spaces and the strength in bits:
+stderr shows the runs or blocks separated by spaces and the strength in bits:
   known  attacker knows passssgen, its flags and the length (the honest number)
   naive  attacker brute-forces the 94 printable ASCII characters (no space)
          at the same length
@@ -43,6 +53,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 	fs.IntVar(&o.Jitter, "j", 0, "")
 	fs.StringVar(&o.Symbols, "s", DefaultSymbols, "")
 	fs.BoolVar(&o.Anywhere, "a", false, "")
+	mode := fs.String("m", "runs", "")
+	fs.IntVar(&o.Upper, "u", 6, "")
+	fs.IntVar(&o.Digits, "d", 2, "")
+	fs.IntVar(&o.Lower, "l", 6, "")
 	count := fs.Int("c", 1, "")
 	quiet := fs.Bool("q", false, "")
 	showVersion := fs.Bool("version", false, "")
@@ -52,6 +66,14 @@ func run(args []string, stdout, stderr io.Writer) int {
 	if *showVersion {
 		fmt.Fprintln(stdout, version)
 		return 0
+	}
+	switch *mode {
+	case "runs":
+	case "block":
+		o.Block = true
+	default:
+		fmt.Fprintf(stderr, "passssgen: mode must be runs or block, got %q\n", *mode)
+		return 2
 	}
 	if *count < 1 {
 		fmt.Fprintln(stderr, "passssgen: count must be >= 1")

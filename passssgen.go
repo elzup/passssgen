@@ -30,17 +30,39 @@ type Options struct {
 	// Anywhere lets the symbol land inside a run too. By default it only goes
 	// between runs or at either end, so no run is split while typing.
 	Anywhere bool
+
+	// Block switches to block mode: random uppercase, the symbol, digits, then
+	// lowercase, so a phone keyboard changes layer only between blocks. Runs,
+	// RunLen, Jitter and Anywhere are ignored there.
+	Block                bool
+	Upper, Digits, Lower int // characters in each block
+}
+
+// block is one block of block mode: n random characters from set.
+type block struct {
+	set string
+	n   int
+}
+
+func (o Options) blocks() []block {
+	return []block{{classes[1], o.Upper}, {classes[2], o.Digits}, {classes[0], o.Lower}}
 }
 
 func (o Options) validate() error {
-	if o.Runs < len(classes) {
-		return fmt.Errorf("runs must be >= %d to use every class", len(classes))
-	}
-	if o.Jitter < 0 {
-		return fmt.Errorf("jitter must be >= 0")
-	}
-	if o.RunLen-o.Jitter < 1 {
-		return fmt.Errorf("run length minus jitter must be >= 1")
+	if o.Block {
+		if o.Upper < 1 || o.Digits < 1 || o.Lower < 1 {
+			return fmt.Errorf("every block needs at least 1 character")
+		}
+	} else {
+		if o.Runs < len(classes) {
+			return fmt.Errorf("runs must be >= %d to use every class", len(classes))
+		}
+		if o.Jitter < 0 {
+			return fmt.Errorf("jitter must be >= 0")
+		}
+		if o.RunLen-o.Jitter < 1 {
+			return fmt.Errorf("run length minus jitter must be >= 1")
+		}
 	}
 	// Symbols are picked and counted per byte, so each must be one distinct
 	// ASCII character that cannot merge into a run.
@@ -76,6 +98,9 @@ func Generate(o Options) (Result, error) {
 	if err := o.validate(); err != nil {
 		return Result{}, err
 	}
+	if o.Block {
+		return generateBlocks(o)
+	}
 	all := strings.Join(classes, "")
 	for {
 		runs := make([]string, o.Runs)
@@ -99,6 +124,31 @@ func Generate(o Options) (Result, error) {
 		}
 		return insertSymbol(runs, o)
 	}
+}
+
+// generateBlocks builds the block mode password. The view shows each block
+// and the symbol as their own words.
+func generateBlocks(o Options) (Result, error) {
+	var parts []string
+	for _, b := range o.blocks() {
+		var w strings.Builder
+		for range b.n {
+			k, err := randInt(len(b.set))
+			if err != nil {
+				return Result{}, err
+			}
+			w.WriteByte(b.set[k])
+		}
+		parts = append(parts, w.String())
+	}
+	if o.Symbols != "" {
+		k, err := randInt(len(o.Symbols))
+		if err != nil {
+			return Result{}, err
+		}
+		parts = slices.Insert(parts, 1, o.Symbols[k:k+1])
+	}
+	return Result{strings.Join(parts, ""), strings.Join(parts, " ")}, nil
 }
 
 // valid reports whether neighbouring runs differ and every class is used.
@@ -168,6 +218,18 @@ type Strength struct {
 // that add up to the length, and the symbol's choice and position. The length
 // is treated as known because it shows in masked fields and is easy to count.
 func Estimate(o Options, length int) Strength {
+	naive := float64(length) * math.Log2(94)
+	if o.Block {
+		// Every character is independent and the layout is fixed.
+		bits := 0.0
+		for _, b := range o.blocks() {
+			bits += float64(b.n) * math.Log2(float64(len(b.set)))
+		}
+		if o.Symbols != "" {
+			bits += math.Log2(float64(len(o.Symbols)))
+		}
+		return Strength{Known: bits, Naive: naive}
+	}
 	sizes := make([]float64, len(classes))
 	for i, cl := range classes {
 		sizes[i] = float64(len(cl))
@@ -216,7 +278,7 @@ func Estimate(o Options, length int) Strength {
 	if o.Symbols != "" {
 		bits += math.Log2(float64(len(o.Symbols))) + math.Log2(float64(symbolSlots(o, plainLen)))
 	}
-	return Strength{Known: bits, Naive: float64(length) * math.Log2(94)}
+	return Strength{Known: bits, Naive: naive}
 }
 
 // lengthSplits counts the run lengths in RunLen-Jitter..RunLen+Jitter that add

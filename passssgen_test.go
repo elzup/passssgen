@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"math"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -303,6 +304,8 @@ func TestRunExitCodes(t *testing.T) {
 		{[]string{"-c", "0"}, 2, "", "count must be >= 1"},
 		{[]string{"-c", "-1"}, 2, "", "count must be >= 1"},
 		{[]string{"-s", "!!"}, 1, "", "symbols must be distinct"},
+		{[]string{"-m", "x"}, 2, "", "mode must be runs or block"},
+		{[]string{"-m", "block", "-l", "0"}, 1, "", "every block needs"},
 		{[]string{"-x"}, 2, "", "usage: passssgen"},
 		{[]string{"-r", "2"}, 1, "", "runs must be >= 3"},
 	} {
@@ -312,6 +315,51 @@ func TestRunExitCodes(t *testing.T) {
 		}
 		if out.String() != tc.stdout || !strings.Contains(errOut.String(), tc.stderr) {
 			t.Errorf("%v: stdout %q stderr %q", tc.args, out.String(), errOut.String())
+		}
+	}
+}
+
+func TestGenerateBlocks(t *testing.T) {
+	shape := regexp.MustCompile(`^([A-HJ-NP-Z]{6})([!@.\-$?])([2-9]{2})([a-km-np-z]{6})$`)
+	o := Options{Block: true, Upper: 6, Digits: 2, Lower: 6, Symbols: DefaultSymbols}
+	for range 300 {
+		res, err := Generate(o)
+		if err != nil {
+			t.Fatal(err)
+		}
+		m := shape.FindStringSubmatch(res.Password)
+		if m == nil {
+			t.Fatalf("%q does not match the block layout", res.Password)
+		}
+		if want := strings.Join(m[1:], " "); res.View != want {
+			t.Fatalf("view %q, want %q", res.View, want)
+		}
+	}
+}
+
+// Every block mode password must be reachable and equally counted, so the
+// distinct outputs of a tiny alphabet must number exactly 2^Known.
+func TestEstimateBlocksMatchesOutputs(t *testing.T) {
+	saved := classes
+	defer func() { classes = saved }()
+	classes = []string{"ab", "C", "34"}
+	for _, o := range []Options{
+		{Block: true, Upper: 2, Digits: 1, Lower: 2, Symbols: "!@"},
+		{Block: true, Upper: 1, Digits: 2, Lower: 1},
+	} {
+		seen := map[string]bool{}
+		var length int
+		for range 2000 {
+			res, err := Generate(o)
+			if err != nil {
+				t.Fatal(err)
+			}
+			seen[res.Password] = true
+			length = len(res.Password)
+		}
+		got := Estimate(o, length).Known
+		if want := math.Log2(float64(len(seen))); math.Abs(got-want) > 1e-9 {
+			t.Errorf("%+v: Estimate = %.3f bits, saw %d passwords (%.3f bits)", o, got, len(seen), want)
 		}
 	}
 }
