@@ -49,6 +49,10 @@ Length does not make it strong; **the number of runs** does.
 
 With `-j`, strength varies per password. Once the length is known, only run lengths that add up to it remain. At extreme lengths, such as every run at its shortest or longest, few combinations remain and the password is weaker. Check `known` in the output and generate again if it falls short.
 
+### Keep quiet about using it
+
+Don't say publicly, or next to an account, that you use passssgen. An attacker who knows it only has to search the `known` space, which is far smaller than `naive`. Keeping quiet can push an attacker back toward `naive`, but treat that as a bonus, never as protection: the runs make these passwords easy to recognise once one leaks, and a good password stays safe even when the attacker knows how it was made. Pick options so that `known` alone is strong enough for the account.
+
 ## Usage
 
 ```
