@@ -22,9 +22,9 @@ Or, in block mode, one block per character class so a phone keyboard rarely chan
 
 ```console
 $ passssgen -m block
-YMMUDK@33xwabdu
-  YMMUDK @ 33 xwabdu
-  15 chars, known 63.6 bits, naive 98.3 bits
+BMMST.58rtvjw
+  BMMST . 58 rtvjw
+  13 chars, known 54.4 bits, naive 85.2 bits
 ```
 
 stdout gets only the password. The view and strength go to stderr, so `passssgen | pbcopy` copies just the password.
@@ -64,7 +64,8 @@ With `-j`, strength varies per password. Once the length is known, only run leng
 
 | Options | Length | known | Example |
 | --- | --- | --- | --- |
-| `-m block` (`-u 6 -d 2 -l 6`) | 15 | ~64 bits: enough for Wi-Fi (WPA2) | `YMMUDK@33xwabdu` |
+| `-m block` (`-u 5 -d 2 -l 5`) | 13 | ~54 bits: home Wi-Fi (WPA2), about 150 years for one GPU | `BMMST.58rtvjw` |
+| `-m block -u 6 -d 2 -l 6` | 15 | ~64 bits: Wi-Fi against a well-funded attacker | `WDTTDK$35edbzjv` |
 | `-m block -u 8 -d 3 -l 8` | 20 | ~85 bits: on par with 13 random characters | `JRQEUSEH-925buyzmifr` |
 | `-m block -u 4 -d 1 -l 3` | 9 | ~38 bits: online only | `FCVD!5vzv` |
 
@@ -89,9 +90,9 @@ passssgen -m block [-u upper] [-d digits] [-l lower] [-s symbols] [-c count] [-q
 | `-j` | 0 | How far run lengths may vary. `-b 4 -j 1` gives 3 to 5. Adds strength, but you have to count characters from the run view |
 | `-s` | `!@.-$?` | Symbol candidates. Distinct ASCII punctuation only (no letters, digits, spaces or non-ASCII). `""` for no symbol |
 | `-a` | off | Let the symbol land inside a run too, not only between runs |
-| `-u` | 6 | Block mode: uppercase letters |
+| `-u` | 5 | Block mode: uppercase letters |
 | `-d` | 2 | Block mode: digits |
-| `-l` | 6 | Block mode: lowercase letters |
+| `-l` | 5 | Block mode: lowercase letters |
 | `-c` | 1 | Number of passwords to print, at least 1 |
 | `-q` | off | Hide the view and strength on stderr |
 

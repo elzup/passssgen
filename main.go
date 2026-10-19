@@ -21,10 +21,10 @@ runs mode: runs of one repeated character
   -j n        let each run length wobble by up to n around len (default 0)
   -a          let the symbol land inside a run, not only between runs
 
-block mode: uppercase, symbol, digits, lowercase (e.g. YMMUDK@33xwabdu)
-  -u n        uppercase characters (default 6)
+block mode: uppercase, symbol, digits, lowercase (e.g. BMMST.58rtvjw)
+  -u n        uppercase characters (default 5)
   -d n        digits (default 2)
-  -l n        lowercase characters (default 6)
+  -l n        lowercase characters (default 5)
 
 both modes
   -s symbols  candidates for the single symbol (default "!@.-$?", "" for none)
@@ -54,9 +54,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 	fs.StringVar(&o.Symbols, "s", DefaultSymbols, "")
 	fs.BoolVar(&o.Anywhere, "a", false, "")
 	mode := fs.String("m", "runs", "")
-	fs.IntVar(&o.Upper, "u", 6, "")
+	fs.IntVar(&o.Upper, "u", 5, "")
 	fs.IntVar(&o.Digits, "d", 2, "")
-	fs.IntVar(&o.Lower, "l", 6, "")
+	fs.IntVar(&o.Lower, "l", 5, "")
 	count := fs.Int("c", 1, "")
 	quiet := fs.Bool("q", false, "")
 	showVersion := fs.Bool("version", false, "")
