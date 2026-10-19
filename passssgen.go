@@ -69,8 +69,9 @@ func randInt(n int) (int, error) {
 
 // Generate builds Runs runs of one repeated character each. Neighbouring runs
 // never share a character, every class appears at least once, and one symbol
-// is inserted at a random position. Retrying on a missing class keeps the
-// result uniform over all valid passwords.
+// is inserted at a random position. Drawing every run freely and retrying the
+// whole password until it is valid keeps the result uniform over all valid
+// passwords.
 func Generate(o Options) (Result, error) {
 	if err := o.validate(); err != nil {
 		return Result{}, err
@@ -78,40 +79,39 @@ func Generate(o Options) (Result, error) {
 	all := strings.Join(classes, "")
 	for {
 		runs := make([]string, o.Runs)
-		used := make([]bool, len(classes))
-		prev := byte(0)
 		for i := range runs {
-			var c byte
-			for {
-				k, err := randInt(len(all))
-				if err != nil {
-					return Result{}, err
-				}
-				if c = all[k]; c != prev {
-					break
-				}
-			}
-			prev = c
-			for ci, cl := range classes {
-				if strings.ContainsRune(cl, rune(c)) {
-					used[ci] = true
-				}
+			k, err := randInt(len(all))
+			if err != nil {
+				return Result{}, err
 			}
 			n := o.RunLen
 			if o.Jitter > 0 {
-				k, err := randInt(2*o.Jitter + 1)
+				j, err := randInt(2*o.Jitter + 1)
 				if err != nil {
 					return Result{}, err
 				}
-				n += k - o.Jitter
+				n += j - o.Jitter
 			}
-			runs[i] = strings.Repeat(string(c), n)
+			runs[i] = strings.Repeat(all[k:k+1], n)
 		}
-		if slices.Contains(used, false) {
+		if !valid(runs) {
 			continue
 		}
 		return insertSymbol(runs, o)
 	}
+}
+
+// valid reports whether neighbouring runs differ and every class is used.
+func valid(runs []string) bool {
+	for i := 1; i < len(runs); i++ {
+		if runs[i][0] == runs[i-1][0] {
+			return false
+		}
+	}
+	plain := strings.Join(runs, "")
+	return !slices.ContainsFunc(classes, func(cl string) bool {
+		return !strings.ContainsAny(plain, cl)
+	})
 }
 
 func insertSymbol(runs []string, o Options) (Result, error) {
