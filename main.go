@@ -57,7 +57,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "passssgen: count must be >= 1")
 		return 2
 	}
-	for i := 0; i < *count; i++ {
+	for range *count {
 		res, err := Generate(o)
 		if err != nil {
 			fmt.Fprintln(stderr, "passssgen:", err)

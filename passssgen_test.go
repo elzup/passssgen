@@ -24,7 +24,7 @@ func splitRuns(s string) []string {
 }
 
 func TestGenerateDefaults(t *testing.T) {
-	for i := 0; i < 500; i++ {
+	for range 500 {
 		res, err := Generate(defaults)
 		if err != nil {
 			t.Fatal(err)
@@ -69,7 +69,7 @@ func TestGenerateJitter(t *testing.T) {
 	for _, j := range []int{1, 2} {
 		o := Options{Runs: 8, RunLen: 4, Jitter: j}
 		lens := map[int]bool{}
-		for i := 0; i < 200; i++ {
+		for range 200 {
 			res, err := Generate(o)
 			if err != nil {
 				t.Fatal(err)
@@ -92,7 +92,7 @@ func TestGenerateJitter(t *testing.T) {
 }
 
 func TestGenerateNoAmbiguous(t *testing.T) {
-	for i := 0; i < 300; i++ {
+	for range 300 {
 		res, _ := Generate(defaults)
 		if strings.ContainsAny(res.Password, "0O1lIo") {
 			t.Fatalf("%q contains a look-alike", res.Password)
@@ -116,7 +116,7 @@ func TestGenerateTinyClasses(t *testing.T) {
 	saved := classes
 	defer func() { classes = saved }()
 	classes = []string{"a", "B", "3"}
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		res, err := Generate(Options{Runs: 3, RunLen: 1})
 		if err != nil {
 			t.Fatal(err)
@@ -139,7 +139,7 @@ func TestGenerateSymbolPositions(t *testing.T) {
 	} {
 		o := Options{Runs: 3, RunLen: 2, Symbols: "!", Anywhere: tc.anywhere}
 		seen := map[int]bool{}
-		for i := 0; i < 700; i++ {
+		for range 700 {
 			res, err := Generate(o)
 			if err != nil {
 				t.Fatal(err)

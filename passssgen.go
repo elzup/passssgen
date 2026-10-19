@@ -7,6 +7,7 @@ import (
 	"math/big"
 	"slices"
 	"strings"
+	"unicode"
 )
 
 // Character classes with look-alikes removed (0 O o, 1 l I, etc).
@@ -43,17 +44,13 @@ func (o Options) validate() error {
 	}
 	// Symbols are picked and counted per byte, so each must be one distinct
 	// ASCII character that cannot merge into a run.
-	for i := 0; i < len(o.Symbols); i++ {
-		c := o.Symbols[i]
-		if c <= ' ' || c > '~' || isAlnum(c) || strings.IndexByte(o.Symbols[:i], c) >= 0 {
+	for i, r := range o.Symbols {
+		punct := unicode.IsPunct(r) || unicode.IsSymbol(r)
+		if r > unicode.MaxASCII || !punct || strings.ContainsRune(o.Symbols[:i], r) {
 			return fmt.Errorf("symbols must be distinct ASCII punctuation, got %q", o.Symbols)
 		}
 	}
 	return nil
-}
-
-func isAlnum(c byte) bool {
-	return 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z' || '0' <= c && c <= '9'
 }
 
 // Result is a generated password plus a view that shows its runs.
@@ -96,7 +93,7 @@ func Generate(o Options) (Result, error) {
 			}
 			prev = c
 			for ci, cl := range classes {
-				if strings.IndexByte(cl, c) >= 0 {
+				if strings.ContainsRune(cl, rune(c)) {
 					used[ci] = true
 				}
 			}
@@ -132,11 +129,7 @@ func insertSymbol(runs []string, o Options) (Result, error) {
 	}
 	if !o.Anywhere {
 		// pos is a boundary index; turn it into the offset after pos runs.
-		b := pos
-		pos = 0
-		for _, r := range runs[:b] {
-			pos += len(r)
-		}
+		pos = len(strings.Join(runs[:pos], ""))
 	}
 	sym := string(o.Symbols[k])
 	// Place the symbol inside the view too, so the view reads the same.
@@ -182,18 +175,19 @@ func Estimate(o Options, length int) Strength {
 	full := 1<<len(classes) - 1
 	// dp[mask][last] = sequences whose used classes are mask and whose last
 	// run is in class last. Counts in float64 stay exact enough for bits.
-	dp := make([][]float64, full+1)
-	for m := range dp {
-		dp[m] = make([]float64, len(classes))
+	table := func() [][]float64 {
+		t := make([][]float64, full+1)
+		for m := range t {
+			t[m] = make([]float64, len(classes))
+		}
+		return t
 	}
+	dp := table()
 	for c := range classes {
 		dp[1<<c][c] = sizes[c]
 	}
-	for step := 1; step < o.Runs; step++ {
-		next := make([][]float64, full+1)
-		for m := range next {
-			next[m] = make([]float64, len(classes))
-		}
+	for range o.Runs - 1 {
+		next := table()
 		for m := range dp {
 			for last, v := range dp[m] {
 				if v == 0 {
@@ -231,10 +225,10 @@ func Estimate(o Options, length int) Strength {
 func lengthSplits(o Options, total int) float64 {
 	ways := make([]float64, total+1)
 	ways[0] = 1
-	for r := 0; r < o.Runs; r++ {
+	for range o.Runs {
 		next := make([]float64, total+1)
 		for sum, v := range ways {
-			for n := o.RunLen - o.Jitter; n <= o.RunLen+o.Jitter && sum+n <= total; n++ {
+			for n := o.RunLen - o.Jitter; n <= min(o.RunLen+o.Jitter, total-sum); n++ {
 				next[sum+n] += v
 			}
 		}
