@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"slices"
 	"strings"
 )
 
@@ -109,20 +110,11 @@ func Generate(o Options) (Result, error) {
 			}
 			runs[i] = strings.Repeat(string(c), n)
 		}
-		if !allTrue(used) {
+		if slices.Contains(used, false) {
 			continue
 		}
 		return insertSymbol(runs, o)
 	}
-}
-
-func allTrue(bs []bool) bool {
-	for _, b := range bs {
-		if !b {
-			return false
-		}
-	}
-	return true
 }
 
 func insertSymbol(runs []string, o Options) (Result, error) {
