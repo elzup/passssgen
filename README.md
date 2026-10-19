@@ -51,7 +51,7 @@ With `-j`, strength varies per password. Once the length is known, only run leng
 
 ### Keep quiet about using it
 
-Don't say publicly, or next to an account, that you use passssgen. An attacker who knows it only has to search the `known` space, which is far smaller than `naive`. Keeping quiet can push an attacker back toward `naive`, but treat that as a bonus, never as protection: the runs make these passwords easy to recognise once one leaks, and a good password stays safe even when the attacker knows how it was made. Pick options so that `known` alone is strong enough for the account.
+Don't say publicly, or next to an account, that you use passssgen. An attacker who knows it only has to search the `known` space, which is far smaller than `naive`. Keeping quiet can push an attacker back toward `naive`, but treat that as a bonus, never as protection. If one of your passwords ever leaks in plain text (a phishing page, a site that stores passwords badly), its runs give away the generator, and your other accounts then face the `known` search. A good password stays safe even when the attacker knows how it was made. Pick options so that `known` alone is strong enough for the account.
 
 ## Usage
 
